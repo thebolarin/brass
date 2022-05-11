@@ -56,10 +56,6 @@ class LoginController extends Controller
             } 
 
             return $this->respondWithToken($token);
-            
-            // $user = $this->guard()->user();
-            // return $user->user
-            //return response()->json(['error' => 'Unauthorized'], 401);
 
         } catch (\Exception $e) {
             return response()->json(['error' => 'could_not_create_token', 'message'=>$e->getMessage()], 500); 
