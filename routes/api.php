@@ -49,3 +49,5 @@ Route::group(['prefix' => 'transfer', 'middleware' => 'user'], function () {
     Route::post('/', [FundTransferController::class, 'sendFunds']);
     Route::post('/withdraw', [FundTransferController::class, 'withdrawFunds']);
 });
+
+Route::post('/paystack-webhook', [FundTransferController::class, 'paystackWebhook']);

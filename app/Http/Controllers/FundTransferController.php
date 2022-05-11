@@ -110,6 +110,7 @@ class FundTransferController extends Controller
             "status" => "success",
             'amount' => $request->amount,
             'payment_reference' => $reference,
+            "provider" => 'paystack',
             'narration' => "Wallet Funding"
         ]); 
 
@@ -124,6 +125,7 @@ class FundTransferController extends Controller
             'wallet_id' => $request->beneficiary_wallet_id,
             'amount' => $request->amount,
             'payment_reference' => $reference,
+            "provider" => 'paystack',
             'narration' => "Wallet Funding"
         ]);
 
@@ -204,13 +206,23 @@ class FundTransferController extends Controller
     }
 
     public function paystackWebhook(Request $request){
-       $transfer = FundTransfer::where('reference' , $request->data->reference)->firstOrFail();
+        $secret = env('PAYSTACK_SECRET_KEY');
+        $secret_hash = $request->header('x-paystack-signature');
+        $hash = hash_hmac('sha512', $request, $secret);
+
+        if($hash !== $secret_hash){
+         return response()->json([ 'error' => 'Invalid Signature'], 400);
+        }
+        
+        $requestObject = json_decode($request->getContent());
+       
+        $transfer = FundTransfer::where('payment_reference' , $requestObject->data->reference)
+        ->where('provider', 'paystack')->firstOrFail();
 
        $status = 'failed';
+       if($requestObject->data->status == 'success' && $requestObject->event == 'transfer.success') $status = 'success';
 
-       if($request->data->status == 'success' && $request->event == 'transfer.success') $status = 'success';
-
-       $transfer->status = $request->data->status;
+       $transfer->status = $requestObject->data->status;
        $transfer->save();
 
        return response()->json([ 'message' => 'Transfer status updated successfully'], 200);
