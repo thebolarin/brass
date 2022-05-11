@@ -24,6 +24,9 @@ use App\Http\Controllers\FundTransferController;
 //     return $request->user();
 // });
 
+Route::get('/', function (Request $request) {
+    return 'Hello!! Welcome to Brass Test App';
+});
 
 Route::post('register', [RegisterController::class, 'register']);
 Route::post('login', [LoginController::class, 'login']);
