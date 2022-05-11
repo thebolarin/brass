@@ -17,6 +17,7 @@ class RegisterController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string', 'max:255'],
             'bank_code' => ['required', 'string', 'max:255'],
+            'bank_name' => ['required', 'string', 'max:255'],
             'account_number' => ['required', 'string', 'max:255'],
             'account_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
@@ -34,28 +35,17 @@ class RegisterController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
-        // $response = $this->createTransferRecipient([
-        //     'bank_code' => $request->bank_code,
-        //     'account_number' => $request->account_number,
-        //     'account_name' => $request->account_name,
-        // ]);
+        $response = $this->createUserBank($user->id,$request);
 
-       // if(!$response) abort(response('Unable to process user bank. Please try again', 400) );
+        if(!$response) {
+            $user->delete();
+            abort(response('Unable to process user bank details. Please try again', 400) );
+        }
 
-        $userBank = UserBank::create([
-            'user_id' => $user->id,
-            'bank_code' => $request->bank_code,
-            'account_number' => $request->account_number,
-            'account_name' => $request->account_name,
-            //'transfer_recipient' => $response->data->recipient_code
-        ]);
+        $this->createWallet($user->id);
 
-        $wallet = Wallet::create([
-            'amount' => 0.00,
-            'currency_code' => 'NGN',
-            'status' => 'Active',
-            'user_id' =>  $user->id,
-        ]);
+        $user->refresh();
+        $user->load([ "userBank", "wallets" ]);
         
         return response()->json([
             'message' => "User successfully created.",
@@ -63,8 +53,55 @@ class RegisterController extends Controller
         ],201);
     }
 
+    /**
+	 * Create a user bank
+	 *
+	 * @return void
+	 */
+    protected function createUserBank($user_id, $request){
+        $response = $this->createTransferRecipient([
+            'bank_code' => $request->bank_code,
+            'account_number' => $request->account_number,
+            'account_name' => $request->account_name,
+        ]);
+
+       if(!$response) return false;
+
+        $userBank = UserBank::create([
+            'user_id' => $user_id,
+            'bank_code' => $request->bank_code,
+            'bank_name' => $request->bank_name,
+            'account_number' => $request->account_number,
+            'account_name' => $request->account_name,
+            'transfer_recipient' => $response['data']['recipient_code']
+        ]);
+
+        return $userBank;
+    }
+
+    /**
+	 * Create a wallet
+	 *
+	 * @return void
+	 */
+    protected function createWallet($user_id){
+        Wallet::create([
+            'amount' => 0.00,
+            'currency_code' => 'NGN',
+            'status' => 'Active',
+            'user_id' =>  $user_id,
+        ]);
+    }
+
+    /**
+	 * Create a transfer recipient on paystack
+	 *
+	 * @return void
+	 */
     protected function createTransferRecipient($userBank){
         $url = env('PAYSTACK_BASEURI') . '/transferrecipient';
+
+        $userBank = json_decode(json_encode($userBank));
 
         $data = [
             'bank_code' => $userBank->bank_code,
@@ -74,8 +111,10 @@ class RegisterController extends Controller
             "currency" => "NGN"
         ];
 
+        $secret = env('PAYSTACK_SECRET_KEY');
+
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer' . env('PAYSTACK_SECRET_KEY')
+            'Authorization' => "Bearer ${secret}"
         ])->post($url, $data);
 
         if(!$response->successful()) return false;

@@ -111,7 +111,6 @@ class FundTransferController extends Controller
         //update beneficiary wallet
         $beneficiaryWallet->increment('amount', $request->amount);
 
-
         return response()->json([ 'message' => 'Funds Transferred Successful'], 200);
     }
 
@@ -142,7 +141,7 @@ class FundTransferController extends Controller
 
         $userBank = $user->userBank;
 
-        $response = $this->paystackTransfer($request->amount, $userBank->transfer_recipient);
+        $response = $this->paystackTransfer($request->amount * 100, $userBank->transfer_recipient);
 
         if(!$response) {
             $wallet->increment('amount', $request->amount);
