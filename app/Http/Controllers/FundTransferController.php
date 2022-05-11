@@ -19,11 +19,13 @@ class FundTransferController extends Controller
         $validator = \Validator::make([
             'status' => $request->name ?? null,
             'reference' => $request->name ?? null,
-            'type' => $request->type ?? null
+            'type' => $request->type ?? null,
+            'wallet_id' => $request->type ?? null
         ], [
             'status' => 'nullable|string|in:success,failed,processing',
             'reference' => 'nullable|string|max:100',
             'type' => 'nullable|string|in:Inwards,Outwards',
+            'wallet_id' => 'nullable|integer|exists:wallets,id',
         ]);
         
         if ($validator->fails()) {
@@ -33,12 +35,28 @@ class FundTransferController extends Controller
 
         $count = isset($request->count) && is_int($request->count) ? $request->count : 10;
         $reference = $request->reference;
+        $type = $request->type;
+        $wallet_id = $request->wallet_id;
+
         $user = auth()->guard('user')->user();
 
         $fundTransfers = $fundTransfer->newQuery();
+
         $fundTransfers->where('user_id', $user->id);
 
-        $fundTransfers = $fundTransfers->paginate($count);
+        if (check_exists($reference)) {
+            $fundTransfers->where('payment_reference', $reference);
+        }
+
+        if (check_exists($type)) {
+            $fundTransfers->where('type', $type);
+        }
+
+        if (check_exists($wallet_id)) {
+            $fundTransfers->where('wallet_id', $wallet_id);
+        }
+
+        $fundTransfers = $fundTransfers->latest()->paginate($count);
 
         return $fundTransfers;
     }
@@ -47,8 +65,9 @@ class FundTransferController extends Controller
 
         $user = auth()->guard('user')->user();
 
-        if($fundTransfer->user_id !== $user->id) 
+        if($fundTransfer->user_id !== $user->id) {
             return response()->json([ 'error' => 'Only Transfer Owner can get transfer'], 400);
+        }
 
         return $fundTransfer;
     }
@@ -81,7 +100,7 @@ class FundTransferController extends Controller
         ->where('id', $request->beneficiary_wallet_id)->firstOrFail();
 
         
-        $reference = $this->generate_random_strings(6);
+        $reference = generate_random_strings(6);
 
         //create transfer for sender
         FundTransfer::create([
@@ -195,17 +214,5 @@ class FundTransferController extends Controller
        $transfer->save();
 
        return response()->json([ 'message' => 'Transfer status updated successfully'], 200);
-    }
-
-    protected function generate_random_strings($strength = 3): string{
-        $input = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        $input_length = strlen($input);
-        $random_string = '';
-        for ($i = 0; $i < $strength; $i++) {
-            $random_character = $input[mt_rand(0, $input_length - 1)];
-            $random_string .= $random_character;
-        }
- 
-        return $random_string;
     }
 }
