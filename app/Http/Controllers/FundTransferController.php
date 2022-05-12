@@ -239,7 +239,7 @@ class FundTransferController extends Controller
        $status = 'failed';
        if($requestObject->data->status == 'success' && $requestObject->event == 'transfer.success') $status = 'success';
 
-       $transfer->status = $requestObject->data->status;
+       $transfer->status = $status;
        $transfer->save();
 
        return response()->json([ 'message' => 'Transfer status updated successfully'], 200);

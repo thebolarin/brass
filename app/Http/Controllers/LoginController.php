@@ -54,7 +54,7 @@ class LoginController extends Controller
 
         $user = User::where('email', $request->email)->first();
         if(!$user) 
-            return response()->json(['message' => "User with email {$request->email} does not exist"], 404);
+            return response()->json(['message' => "User with email {$request->email} does not exist"], 401);
 
         try { 
             if(!$token = $this->guard()->login($user)) {
