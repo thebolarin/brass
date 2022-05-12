@@ -20,7 +20,7 @@ class RegisterController extends Controller
             'bank_name' => 'required|string',
             'account_number' => 'required|string',
             'account_name' => 'required|string',
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
+            'email' => 'required|string|email|unique:users',
             'password' => 'required|string|min:8',
         ]);
 
