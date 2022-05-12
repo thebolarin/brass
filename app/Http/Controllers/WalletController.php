@@ -80,8 +80,7 @@ class WalletController extends Controller
         $user = auth()->guard('user')->user();
         $wallet = Wallet::where('id', $request->wallet_id)->where('user_id', $user->id)->firstOrFail();
 
-        $wallet->amount = $request->amount;
-        $wallet->save();
+        $wallet->increment('amount', $request->amount);
 
         return response()->json([ 'message' => 'Wallet Funded Successfully'], 200);
     }
