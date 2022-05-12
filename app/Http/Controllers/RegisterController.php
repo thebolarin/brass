@@ -14,14 +14,14 @@ class RegisterController extends Controller
 {
     public function register(Request $request){
         $validator = Validator::make($request->all(), [
-            'name' => ['required', 'string', 'max:255'],
-            'phone' => ['required', 'string', 'max:255'],
-            'bank_code' => ['required', 'string', 'max:255'],
-            'bank_name' => ['required', 'string', 'max:255'],
-            'account_number' => ['required', 'string', 'max:255'],
-            'account_name' => ['required', 'string', 'max:255'],
+            'name' => 'required|string',
+            'phone' => 'required|string',
+            'bank_code' => 'required|string',
+            'bank_name' => 'required|string',
+            'account_number' => 'required|string',
+            'account_name' => 'required|string',
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users'],
-            'password' => ['required', 'string', 'min:8'],
+            'password' => 'required|string|min:8',
         ]);
 
         if ($validator->fails()) {
