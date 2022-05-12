@@ -7,6 +7,7 @@ use App\Models\User;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 use Illuminate\Support\Facades\Auth;
 use JWTAuth;
+use Illuminate\Support\Facades\Validator;
 
 class LoginController extends Controller
 {
@@ -41,10 +42,15 @@ class LoginController extends Controller
      * @return \Illuminate\Http\Response
      */
     public function login(Request $request){
-        $credentials = $request->validate([
-            'email' => 'required|email', //|exists:users,email
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email|exists:users,email',
             'password' => ['required'],
         ]);
+
+        if ($validator->fails()) {
+            return response()
+                ->json(["errors" => $validator->errors()], 400);
+        }
 
         $user = User::where('email', $request->email)->first();
         if(!$user) 

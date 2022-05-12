@@ -26,6 +26,11 @@ class WalletController extends Controller
         return $wallets;
     }
 
+    /**
+     * Get a single wallet.
+     * 
+     * @return \Illuminate\Http\Response
+     */
     public function show(Wallet $wallet){
 
         $user = auth()->guard('user')->user();
@@ -36,6 +41,12 @@ class WalletController extends Controller
         return $wallet;
     }
 
+    /**
+     * Create a new wallet.
+     * 
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
     public function store(Request $request){
        
         $user = auth()->guard('user')->user();
@@ -50,6 +61,12 @@ class WalletController extends Controller
         return response()->json([ 'message' => 'Wallet Created Successfully'], 200);
     }
 
+    /**
+     * Fund a wallet.
+     * 
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
     public function fundWallet(Request $request){
         $validator = Validator::make($request->all(), [
             'amount' => 'required|numeric|between:0,9999999999999.99',
@@ -69,6 +86,12 @@ class WalletController extends Controller
         return response()->json([ 'message' => 'Wallet Funded Successfully'], 200);
     }
 
+    /**
+     * Uodate a wallet status.
+     * 
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
     public function updateStatus(Request $request, Wallet $wallet){
         $validator = Validator::make($request->all(), [
             'status' => 'required|string|in:Active,Inactive',

@@ -61,6 +61,11 @@ class FundTransferController extends Controller
         return $fundTransfers;
     }
 
+    /**
+     * Get a Single Transfer
+     * 
+     * @return \Illuminate\Http\Response
+     */
     public function show(FundTransfer $fundTransfer){
 
         $user = auth()->guard('user')->user();
@@ -72,6 +77,12 @@ class FundTransferController extends Controller
         return $fundTransfer;
     }
 
+    /**
+     * Send funds to another wallet.
+     * 
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
     public function sendFunds(Request $request){
         $validator = Validator::make($request->all(), [
             'amount' => 'required|numeric|between:0,9999999999999.99',
@@ -135,6 +146,12 @@ class FundTransferController extends Controller
         return response()->json([ 'message' => 'Funds Transferred Successful'], 200);
     }
 
+     /**
+     * Withdraw funds from wallet to bank account.
+     * 
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
     public function withdrawFunds(Request $request){
         $validator = Validator::make($request->all(), [
             'amount' => 'required|numeric|between:0,9999999999999.99',
