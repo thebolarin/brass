@@ -8,6 +8,7 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\WalletController;
 use App\Http\Controllers\UserBankController;
 use App\Http\Controllers\FundTransferController;
+use App\Http\Controllers\BankController;
 
 /*
 |--------------------------------------------------------------------------
@@ -31,23 +32,33 @@ Route::get('/', function (Request $request) {
 Route::post('register', [RegisterController::class, 'register']);
 Route::post('login', [LoginController::class, 'login']);
 
+Route::get('authenticated-user', [LoginController::class, 'getAuthenticatedUser'])->middleware('user');
+
 Route::group(['prefix' => 'wallet', 'middleware' => 'user'], function () {
     Route::get('/', [WalletController::class, 'index']);
     Route::get('/{wallet}', [WalletController::class, 'show']);
     Route::post('/', [WalletController::class, 'store']);
-    Route::post('/fund', [WalletController::class, 'fundWallet']);
-    Route::put('/{wallet}/status', [WalletController::class, 'updateStatus']);
+    Route::post('/fund/{wallet}', [WalletController::class, 'fundWallet']);
+    Route::put('/activate/{wallet}', [WalletController::class, 'activateWallet']);
+    Route::put('/deactivate/{wallet}', [WalletController::class, 'deactivateWallet']);
 });
 
-Route::group(['prefix' => 'user-bank'], function () {
+Route::group(['prefix' => 'user-bank', 'middleware' => 'user'], function () {
     Route::get('/', [UserBankController::class, 'index']);
+    Route::get('/{userBank}', [UserBankController::class, 'show']);
+    Route::post('/', [UserBankController::class, 'store']);
+    Route::delete('/{userBank}', [UserBankController::class, 'destroy']);
 });
 
 Route::group(['prefix' => 'transfer', 'middleware' => 'user'], function () {
     Route::get('/', [FundTransferController::class, 'index']);
     Route::get('/{fundTransfer}', [FundTransferController::class, 'show']);
-    Route::post('/', [FundTransferController::class, 'sendFunds']);
-    Route::post('/withdraw', [FundTransferController::class, 'withdrawFunds']);
+    Route::post('/wallet/{wallet}', [FundTransferController::class, 'sendFundsToAWallet']);
+    Route::post('/wallet/{wallet}/bank', [FundTransferController::class, 'withdrawFundsToBank']);
+});
+
+Route::group(['prefix' => 'bank'], function () {
+    Route::get('/', [BankController::class, 'index']);
 });
 
 Route::post('/paystack-webhook', [FundTransferController::class, 'paystackWebhook']);

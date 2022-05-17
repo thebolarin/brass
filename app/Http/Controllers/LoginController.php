@@ -28,11 +28,13 @@ class LoginController extends Controller
      * @return \Illuminate\Http\JsonResponse
      */
     protected function respondWithToken($token){
-        return response()->json([
+        $data = [
             'access_token' => $token,
             'token_type' => 'bearer',
             'expires_in' => $this->guard()->factory()->getTTL() * 60
-        ]);
+        ];
+
+        return $this->respond($data);
     }
 
     /**
@@ -47,27 +49,21 @@ class LoginController extends Controller
             'password' => 'required|string',
         ]);
 
-        if ($validator->fails()) {
-            return response()
-                ->json(["errors" => $validator->errors()], 400);
-        }
+        if ($validator->fails()) return $this->respond($validator->errors(), 400, "Error");
 
         $user = User::where('email', $request->email)->first();
-        if(!$user) 
-            return response()->json(['message' => "User with email {$request->email} does not exist"], 401);
+        if(!$user) return $this->respond("User with email {$request->email} does not exist", 400, "Error");
 
         try { 
-            if(!$token = $this->guard()->login($user)) {
-                return response()->json(['error' => 'invalid_credentials', 'token' => $token], 401);
-            } 
-
+            if(!$token = $this->guard()->login($user)) return $this->respond("Invalid_credentials", 401, "Error");
             return $this->respondWithToken($token);
 
         } catch (\Exception $e) {
-            return response()->json(['error' => 'could_not_create_token', 'message'=>$e->getMessage()], 500); 
+            // return response()->json(['error' => 'could_not_create_token', 'message'=>$e->getMessage()], 500); 
+            return $this->respond($e);
         }
 
-        return response()->json(['error' => 'Unauthorized'], 401);
+        return $this->respond("Unauthorized", 401, "Error");
     }
 
     /**
@@ -78,15 +74,9 @@ class LoginController extends Controller
      * 
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getAuthenticatedUser()
+    public function getAuthenticatedUser(Request $request)
     {
-        $user = $this->guard()->user();
-
-        if(empty($user)){
-            return response()->json(['error' => 'Unauthorized'], 401);
-        }
-
-        return response()->json(['user' => $user], 200);
+        return $this->respond($request->user);
     }
 
     /**
@@ -99,7 +89,8 @@ class LoginController extends Controller
         if($this->guard()->user()){
             return $this->respondWithToken($this->guard()->refresh());
         }
-        return response()->json(['error' => 'Unauthorized'], 401);
+
+        return $this->respond("Unauthorized", 401, "Error");
     }
     
     /**
@@ -111,6 +102,6 @@ class LoginController extends Controller
     {
         $this->guard()->logout();
 
-        return response()->json(['message' => 'User successfully signed out']);
+        return $this->respond("User successfully signed out");
     }
 }

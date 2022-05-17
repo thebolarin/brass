@@ -15,10 +15,10 @@ return new class extends Migration
     {
         Schema::create('wallets', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->uuid('user_id')->nullable()->index();
+            $table->foreignUuid('user_id')->index()->constrained(); 
             $table->string('currency_code');
-            $table->decimal('amount', 10, 2);
-            $table->enum('status',['Active','Inactive'])->nullable()->index();
+            $table->integer('amount');
+            $table->tinyInteger('is_active')->default(0);
             $table->timestamps();
         });
     }

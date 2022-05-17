@@ -16,9 +16,21 @@ class UserMiddleware
      */
     public function handle(Request $request, Closure $next)
     {
-        if(!auth()->guard('user')->check()){
-            return response()->json(['error' => 'Unauthorized'], 401);
+        if (!$request->bearerToken()) {
+            return response()->json([
+                'status_code' => 401,
+                'message' => 'Error',
+                'data' => 'Token not found'], 401);
         }
+
+        if(!auth()->guard('user')->check()){
+            return response()->json([
+                'status_code' => 403,
+                'message' => 'Error',
+                'data' => 'Unauthorized'], 403);
+        }
+
+        $request->user = auth()->guard('user')->user();
         
         return $next($request);
     }

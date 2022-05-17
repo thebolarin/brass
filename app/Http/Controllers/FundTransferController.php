@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\FundTransfer;
 use App\Models\Wallet;
+use App\Models\UserBank;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
+use Cknow\Money\Money;
 
 class FundTransferController extends Controller
 {
@@ -17,39 +19,29 @@ class FundTransferController extends Controller
      */
     public function index(Request $request,FundTransfer $fundTransfer){
         $validator = \Validator::make([
-            'status' => $request->name ?? null,
-            'reference' => $request->name ?? null,
-            'type' => $request->type ?? null,
-            'wallet_id' => $request->type ?? null
+            'wallet_id' => $request->type ?? null,
+            'search_term' => $request->search_term ?? null,
         ], [
-            'status' => 'nullable|string|in:success,failed,processing',
-            'reference' => 'nullable|string|max:100',
-            'type' => 'nullable|string|in:Inwards,Outwards',
+            'search_term' => 'nullable|string|max:100',
             'wallet_id' => 'nullable|integer|exists:wallets,id',
         ]);
         
         if ($validator->fails()) {
-            return response()
-                ->json(["errors" => $validator->errors()], 400);
+            return $this->respond($validator->errors(), 400, "Error");
         }
 
         $count = isset($request->count) && is_int($request->count) ? $request->count : 10;
-        $reference = $request->reference;
-        $type = $request->type;
         $wallet_id = $request->wallet_id;
+        $search_term = $request->search_term;
 
-        $user = auth()->guard('user')->user();
+        $user = $request->user;
 
         $fundTransfers = $fundTransfer->newQuery();
 
         $fundTransfers->where('user_id', $user->id);
 
-        if (check_exists($reference)) {
-            $fundTransfers->where('payment_reference', $reference);
-        }
-
-        if (check_exists($type)) {
-            $fundTransfers->where('type', $type);
+        if(check_exists($search_term)) { 
+            $fundTransfers->search($search_term);
         }
 
         if (check_exists($wallet_id)) {
@@ -58,7 +50,7 @@ class FundTransferController extends Controller
 
         $fundTransfers = $fundTransfers->latest()->paginate($count);
 
-        return $fundTransfers;
+        return $this->respond($fundTransfers);
     }
 
     /**
@@ -66,15 +58,15 @@ class FundTransferController extends Controller
      * 
      * @return \Illuminate\Http\Response
      */
-    public function show(FundTransfer $fundTransfer){
+    public function show(Request $request,FundTransfer $fundTransfer){
 
-        $user = auth()->guard('user')->user();
+        $user = $request->user;
 
         if($fundTransfer->user_id !== $user->id) {
-            return response()->json([ 'error' => 'Only Transfer Owner can get transfer'], 400);
+            return $this->respond('Only Transfer Owner can get transfer', 403, "Error");
         }
 
-        return $fundTransfer;
+        return $this->respond($fundTransfer);
     }
 
     /**
@@ -83,67 +75,71 @@ class FundTransferController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function sendFunds(Request $request){
-        $validator = Validator::make($request->all(), [
-            'amount' => 'required|numeric|between:0,9999999999999.99',
-            'debit_wallet_id' => 'required|uuid|exists:wallets,id',
-            'beneficiary_wallet_id' => 'required|uuid|exists:wallets,id',
-        ]);
+    public function sendFundsToAWallet(Request $request, Wallet $wallet){
+        try{
+            $validator = Validator::make($request->all(), [
+                'amount' => 'required|integer',
+                'beneficiary_wallet_id' => 'required|uuid|exists:wallets,id',
+            ]);
+    
+            if ($validator->fails()) {
+                return $this->respond($validator->errors(), 400, "Error");
+            }
+    
+            $user = $request->user;
+    
+            $debitWallet = Wallet::where('is_active', 1)
+            ->where('id', $wallet->id)
+            ->where('user_id', $user->id)->firstOrFail();
+    
+            $walletAmount = $debitWallet->amount;
+    
+            if($walletAmount < $request->amount){
+                return $this->respond("Insufficient wallet balance", 400, "Error");
+            }
+    
+            $beneficiaryWallet = Wallet::where('is_active', 1)
+            ->where('id', $request->beneficiary_wallet_id)->firstOrFail();
+    
+            $reference = generate_random_strings(6);
+    
+            //create transfer for sender
+            FundTransfer::create([
+                'user_id' => $user->id,
+                'wallet_id' => $wallet->id,
+                'type' => "Outwards",
+                "status" => "success",
+                'amount' => $request->amount,
+                'payment_reference' => $reference,
+                "provider" => 'paystack',
+                'narration' => "Wallet Funding"
+            ]); 
+    
+            //update sender wallet
+            $debitWallet->decrement('amount', $request->amount);
+    
+            //create transfer for beneficiary
+            FundTransfer::create([
+                'user_id' => $beneficiaryWallet->user_id,
+                'type' => "Inwards",
+                "status" => "success",
+                'wallet_id' => $request->beneficiary_wallet_id,
+                'amount' => $request->amount,
+                'payment_reference' => $reference,
+                "provider" => 'paystack',
+                'narration' => "Wallet Funding"
+            ]);
+    
+            //update beneficiary wallet
+            $beneficiaryWallet->increment('amount', $request->amount);
+    
+            return $this->respond("Funds Transferred Successful");
 
-        if ($validator->fails()) {
-            return response()
-            ->json([ 'errors' => $validator->errors() ], 400);
-        }
+        } catch(Exception $e) {
+			return $this->respond($e);
+		}
 
-        $user = auth()->guard('user')->user();
-
-        $debitWallet = Wallet::where('status', 'Active')
-        ->where('id', $request->debit_wallet_id)
-        ->where('user_id', $user->id)->firstOrFail();
-
-        $balance = $debitWallet->amount;
-
-        if($balance < $request->amount){
-            return response()->json([ 'error' => 'Insufficient wallet balance'], 400);
-        }
-
-        $beneficiaryWallet = Wallet::where('status', 'Active')
-        ->where('id', $request->beneficiary_wallet_id)->firstOrFail();
-
-        
-        $reference = generate_random_strings(6);
-
-        //create transfer for sender
-        FundTransfer::create([
-            'user_id' => $user->id,
-            'wallet_id' => $request->debit_wallet_id,
-            'type' => "Outwards",
-            "status" => "success",
-            'amount' => $request->amount,
-            'payment_reference' => $reference,
-            "provider" => 'paystack',
-            'narration' => "Wallet Funding"
-        ]); 
-
-        //update sender wallet
-        $debitWallet->decrement('amount', $request->amount);
-
-        //create transfer for beneficiary
-        FundTransfer::create([
-            'user_id' => $beneficiaryWallet->user_id,
-            'type' => "Inwards",
-            "status" => "success",
-            'wallet_id' => $request->beneficiary_wallet_id,
-            'amount' => $request->amount,
-            'payment_reference' => $reference,
-            "provider" => 'paystack',
-            'narration' => "Wallet Funding"
-        ]);
-
-        //update beneficiary wallet
-        $beneficiaryWallet->increment('amount', $request->amount);
-
-        return response()->json([ 'message' => 'Funds Transferred Successful'], 200);
+       
     }
 
      /**
@@ -152,54 +148,57 @@ class FundTransferController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function withdrawFunds(Request $request){
-        $validator = Validator::make($request->all(), [
-            'amount' => 'required|numeric|between:0,9999999999999.99',
-            'wallet_id' => 'required|uuid|exists:wallets,id'
-        ]);
-
-        if ($validator->fails()) {
-            return response()
-            ->json([ 'errors' => $validator->errors() ], 400);
-        }
-        
-        $user = auth()->guard('user')->user();
-        
-        $wallet = Wallet::where('status', 'Active')
-        ->where('id', $request->wallet_id)
-        ->where('user_id', $user->id)->firstOrFail();
-
-        $balance = $wallet->amount;
-
-        if($balance < $request->amount){
-            return response()->json([ 'error' => 'Insufficient wallet balance'], 400);
-        }
-
-        $wallet->decrement('amount', $request->amount);
-
-        $userBank = $user->userBank;
-
-        $response = $this->paystackTransfer($request->amount * 100, $userBank->transfer_recipient);
-
-        if(!$response) {
-            $wallet->increment('amount', $request->amount);
-            return response()->json([ 'error' => 'Unsuccessful withdrawal'], 400);
-        }
-
-        $responseJson = $response->json();
-
-        FundTransfer::create([
-            'user_id' => $user->id,
-            'type' => "Withdrawal",
-            'wallet_id' => $request->wallet_id,
-            "status" => "processing",
-            'amount' => $request->amount,
-            'payment_reference' => $responseJson['data']['reference'],
-            'provider' => 'paystack',
-            'narration' => "Wallet Withdrawal"
-        ]);
-
-        return response()->json([ 'message' => 'Fund Withdrawn Successfully'], 200);
+    public function withdrawFundsToBank(Request $request,Wallet $wallet){
+        try{
+            $validator = Validator::make($request->all(), [
+                'amount' => 'required|numeric|between:0,9999999999999.99',
+                'user_bank_id' => 'required|uuid|exists:user_banks,id',
+            ]);
+    
+            if ($validator->fails()) {
+                return $this->respond($validator->errors(), 400, "Error");
+            }
+            
+            $user = $request->user;
+            
+            $debitWallet = Wallet::where('is_active', 1)
+            ->where('id', $wallet->id)
+            ->where('user_id', $user->id)->firstOrFail();
+    
+            $walletBalance = $debitWallet->amount;
+    
+            if($walletBalance < $request->amount){
+                return $this->respond("Insufficient wallet balance", 400, "Error");
+            }
+    
+            $wallet->decrement('amount', $request->amount);
+    
+            $userBank = UserBank::findOrFail($request->user_bank_id);
+    
+            $response = $this->paystackTransfer($request->amount, $userBank->transfer_recipient);
+    
+            if(!$response) {
+                $wallet->increment('amount', $request->amount);
+                return $this->respond("Unsuccessful withdrawal", 400, "Error");
+            }
+    
+            $responseJson = $response->json();
+    
+            FundTransfer::create([
+                'user_id' => $user->id,
+                'type' => "Withdrawal",
+                'wallet_id' => $wallet->id,
+                "status" => "processing",
+                'amount' => $request->amount,
+                'payment_reference' => $responseJson['data']['reference'],
+                'provider' => 'paystack',
+                'narration' => "Wallet Withdrawal"
+            ]);
+    
+            return $this->respond("Fund has been transferred to your bank account successfully");
+        } catch(Exception $e) {
+			return $this->respond($e);
+		}
     }
 
     protected function paystackTransfer($amount, $recipient){
@@ -223,25 +222,31 @@ class FundTransferController extends Controller
     }
 
     public function paystackWebhook(Request $request){
+        
         $secret = env('PAYSTACK_SECRET_KEY');
         $secret_hash = $request->header('x-paystack-signature');
         $hash = hash_hmac('sha512', $request, $secret);
 
         if($hash !== $secret_hash){
-         return response()->json([ 'error' => 'Invalid Signature'], 400);
+         return $this->respond("Invalid Signature", 400, "Error");
         }
         
         $requestObject = json_decode($request->getContent());
+
+        try{
+            $transfer = FundTransfer::where('payment_reference' , $requestObject->data->reference)
+            ->where('provider', 'paystack')->firstOrFail();
+    
+           $status = 'failed';
+           if($requestObject->data->status == 'success' && $requestObject->event == 'transfer.success') $status = 'success';
+    
+           $transfer->status = $status;
+           $transfer->save();
+    
+           return $this->respond("Transfer status updated successfully");
+        } catch(Exception $e) {
+			return $this->respond($e);
+		}
        
-        $transfer = FundTransfer::where('payment_reference' , $requestObject->data->reference)
-        ->where('provider', 'paystack')->firstOrFail();
-
-       $status = 'failed';
-       if($requestObject->data->status == 'success' && $requestObject->event == 'transfer.success') $status = 'success';
-
-       $transfer->status = $status;
-       $transfer->save();
-
-       return response()->json([ 'message' => 'Transfer status updated successfully'], 200);
     }
 }

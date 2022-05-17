@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Wallet;
 use Illuminate\Support\Facades\Validator;
+use Cknow\Money\Money;
 
 class WalletController extends Controller
 {
@@ -18,12 +19,12 @@ class WalletController extends Controller
         $count = isset($request->count) && is_int($request->count) ? $request->count : 10;
 
         $wallets = $wallet->newQuery();
-        $user = auth()->guard('user')->user();
+        $user = $request->user;
 
         $wallets->where('user_id', $user->id);
         $wallets = $wallets->paginate($count);
 
-        return $wallets;
+        return  $this->respond($wallets);
     }
 
     /**
@@ -31,14 +32,14 @@ class WalletController extends Controller
      * 
      * @return \Illuminate\Http\Response
      */
-    public function show(Wallet $wallet){
+    public function show(Request $request, Wallet $wallet){
 
-        $user = auth()->guard('user')->user();
+        $user = $request->user;
 
         if($wallet->user_id !== $user->id) 
-            return response()->json([ 'error' => 'Only Wallet Owner can get wallet'], 400);
+            return $this->respond("Only Wallet Owner can get wallet", 403, "Error");
 
-        return $wallet;
+        return  $this->respond($wallet);
     }
 
     /**
@@ -48,17 +49,22 @@ class WalletController extends Controller
      * @return \Illuminate\Http\Response
      */
     public function store(Request $request){
-       
-        $user = auth()->guard('user')->user();
+       try{
+        $user = $request->user;
         
         Wallet::create([
             "user_id" => $user->id,
             'currency_code' => "NGN",
-            'amount' => "0.00",
-            'status' => "Active"
+            'amount' => 0,
+            'is_active' => 1
         ]);
 
-        return response()->json([ 'message' => 'Wallet Created Successfully'], 200);
+        return  $this->respond("Wallet Created Successfully");
+
+    } catch(Exception $e) {
+        return $this->respond($e);
+    }
+        
     }
 
     /**
@@ -67,43 +73,51 @@ class WalletController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function fundWallet(Request $request){
-        $validator = Validator::make($request->all(), [
-            'amount' => 'required|numeric|between:0,9999999999999.99',
-            'wallet_id' => 'required|uuid',
-        ]);
+    public function fundWallet(Request $request, Wallet $wallet){
+        try{
+            $validator = Validator::make($request->all(), [
+                'amount' => 'required|numeric|between:0,9999999999999.99',
+            ]);
+    
+            if ($validator->fails()) {
+                return $this->respond($validator->errors(), 400, "Error");
+            }
+            
+            $wallet = Wallet::where('id', $wallet->id)
+            ->where('user_id', $request->user->id)
+            ->where('is_active', 1)->firstOrFail();
+            
+            $amount = $request->amount * 100;
+            $wallet->increment('amount', $amount);
+    
+            return $this->respond('Wallet Funded Successfully');
 
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors() ], 400);
-        }
-
-        $user = auth()->guard('user')->user();
-        $wallet = Wallet::where('id', $request->wallet_id)->where('user_id', $user->id)->firstOrFail();
-
-        $wallet->increment('amount', $request->amount);
-
-        return response()->json([ 'message' => 'Wallet Funded Successfully'], 200);
+        } catch(Exception $e) {
+			return $this->respond($e);
+		}
     }
 
     /**
-     * Uodate a wallet status.
+     * Deactivate Wallet
      * 
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function updateStatus(Request $request, Wallet $wallet){
-        $validator = Validator::make($request->all(), [
-            'status' => 'required|string|in:Active,Inactive',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors() ], 400);
-        }
-
-        $wallet->status = $request->status;
-        $wallet->save();
-
-        return response()->json([ 'message' => 'Wallet Updated Successfully'], 200);
+    public function deactivateWallet(Wallet $wallet)
+    {
+        $wallet->deactivateWallet();
+        return $this->respond('Wallet deactivated successfully');
     }
-    
+
+   /**
+    * Activate Wallet
+    * 
+    * @param  \Illuminate\Http\Request  $request
+    * @return \Illuminate\Http\Response
+    */
+   public function activateWallet(Wallet $wallet)
+   {
+       $wallet->activateWallet();
+       return $this->respond('Wallet activated successfully');
+   }
 }

@@ -37,7 +37,7 @@ class User extends Authenticatable implements JWTSubject
 
     public function userBank()
     {
-        return $this->hasOne(UserBank::class);
+        return $this->hasMany(UserBank::class);
     }
 
     public function wallets()
