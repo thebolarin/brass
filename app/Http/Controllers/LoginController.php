@@ -51,16 +51,12 @@ class LoginController extends Controller
 
         if ($validator->fails()) return $this->respond($validator->errors(), 400, "Error");
 
-        $user = User::where('email', $request->email)->first();
-        if(!$user) return $this->respond("User with email {$request->email} does not exist", 400, "Error");
-
-        try { 
-            if(!$token = $this->guard()->login($user)) return $this->respond("Invalid_credentials", 401, "Error");
+        $credentials = $request->only('email', 'password');
+      
+        if ($token = $this->guard()->attempt($credentials)) {
+            $user = User::where('email', $request->email)->first();
+            if(!$user) return $this->respond("User with email {$request->email} does not exist", 400, "Error");
             return $this->respondWithToken($token);
-
-        } catch (\Exception $e) {
-            // return response()->json(['error' => 'could_not_create_token', 'message'=>$e->getMessage()], 500); 
-            return $this->respond($e);
         }
 
         return $this->respond("Unauthorized", 401, "Error");

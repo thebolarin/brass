@@ -28,7 +28,7 @@ return new class extends Migration
         });
 
         DB::statement("ALTER TABLE fund_transfers ADD COLUMN searchtext TSVECTOR");
-        DB::statement("UPDATE fund_transfers SET searchtext = to_tsvector(COALESCE('english', status, provider, type, payment_reference))");
+        DB::statement("UPDATE fund_transfers SET searchtext = to_tsvector('english', COALESCE( status, provider, type, payment_reference))");
         DB::statement("CREATE INDEX searchtext_gin ON fund_transfers USING GIN(searchtext)");
         DB::statement("CREATE TRIGGER ts_searchtext BEFORE INSERT OR UPDATE ON fund_transfers FOR EACH ROW EXECUTE PROCEDURE tsvector_update_trigger('searchtext', 'pg_catalog.english', 'status', 'provider', 'type', 'payment_reference')");
     }
